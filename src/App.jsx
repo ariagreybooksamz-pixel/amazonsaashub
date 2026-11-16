@@ -1,229 +1,372 @@
-import './App.css'
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import {
+  accountCatalog,
+  clientCatalog,
+  privateNarrative,
+  purchaseOrders,
+  roleConfig,
+  supplierCatalog,
+} from './data/walkthroughData';
 
-const stats = [
-  { value: '4.8x', label: 'faster order cycles' },
-  { value: '99.96%', label: 'platform uptime' },
-  { value: '32%', label: 'lower support load' },
-  { value: '14 days', label: 'average deployment time' },
-]
+const storageKey = 'mps-sourcing-hub-user';
 
-const features = [
-  {
-    icon: '⚡',
-    title: 'Unified operations',
-    text: 'Bring inventory, fulfillment, support, and seller performance into one live command center.',
-  },
-  {
-    icon: '🧠',
-    title: 'AI-powered guidance',
-    text: 'Surface customer sentiment, demand shifts, and pricing opportunities before they impact revenue.',
-  },
-  {
-    icon: '📦',
-    title: 'Fulfillment insight',
-    text: 'Track last-mile performance, stock health, and outbound exceptions in a single operational view.',
-  },
-  {
-    icon: '🔐',
-    title: 'Secure by default',
-    text: 'Role-based access, audit logs, and approval workflows keep every team aligned and compliant.',
-  },
-]
+const currency = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
 
-const integrations = ['Amazon Seller Central', 'Shopify', 'Slack', 'QuickBooks', 'ERP', 'CRM']
-
-const plans = [
-  {
-    name: 'Launch',
-    price: '$49',
-    detail: 'for growing teams',
-    features: ['3 storefronts', 'Smart alerts', 'Growth reports'],
-    featured: false,
-  },
-  {
-    name: 'Scale',
-    price: '$129',
-    detail: 'most popular',
-    features: ['Unlimited dashboards', 'AI forecasting', 'Workflow automations'],
-    featured: true,
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    detail: 'for complex operations',
-    features: ['Multi-region rollout', 'Advanced security', 'Dedicated onboarding'],
-    featured: false,
-  },
-]
+const getVisibleOrders = (role, supplierId) => {
+  if (role === 'operations') return purchaseOrders;
+  if (role === 'sourcing') return purchaseOrders.filter((order) => order.status !== 'Matched');
+  if (role === 'supplier') return purchaseOrders.filter((order) => order.supplierId === supplierId);
+  return [];
+};
 
 function App() {
+  const [session, setSession] = useState(() => {
+    const raw = localStorage.getItem(storageKey);
+    return raw ? JSON.parse(raw) : null;
+  });
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!session) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify(session));
+    const targetRoute = session.isAuthenticated ? `/workspace/${session.role}` : '/';
+    navigate(targetRoute, { replace: true });
+  }, [session, navigate]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage setSession={setSession} />} />
+      <Route path="/signin" element={<HomePage setSession={setSession} />} />
+      <Route
+        path="/workspace/:role"
+        element={
+          session && session.isAuthenticated ? <AuthenticatedDashboard session={session} onSignOut={() => setSession(null)} /> : <Navigate to="/signin" replace />
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function HomePage({ setSession }) {
+  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+
+  const signIn = (event) => {
+    event.preventDefault();
+    const user = accountCatalog.find(
+      (candidate) =>
+        candidate.email.toLowerCase() === loginData.email.trim().toLowerCase() && candidate.password === loginData.password,
+    );
+
+    if (!user) {
+      setError('Invalid invite-only credentials. Contact the workspace administrator for access.');
+      return;
+    }
+
+    setError('');
+    setSession({ ...user, isAuthenticated: true });
+  };
+
   return (
     <div className="page-shell">
-      <header className="topbar">
+      <header className="topbar public-topbar">
         <div className="brand-wrap">
-          <div className="brand-mark">A</div>
-          <span>Amazon SaaS Hub</span>
+          <div className="brand-mark">MPS</div>
+          <div>
+            <div className="brand-name">Sourcing Hub</div>
+            <div className="brand-subtitle">by Area71</div>
+          </div>
         </div>
-        <nav className="nav" aria-label="Main navigation">
+        <nav className="nav-links" aria-label="Main navigation">
           <a href="#features">Features</a>
-          <a href="#solutions">Solutions</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#customers">Customers</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#contacts">Contacts</a>
+          <button className="primary-button" type="button" onClick={() => window.location.assign('/signin')}>Sign In</button>
         </nav>
-        <button type="button" className="nav-button">
-          Book demo
-        </button>
       </header>
 
-      <main>
-        <section className="hero section-shell">
+      <main className="landing-page">
+        <section className="hero-section">
           <div className="hero-copy">
-            <span className="eyebrow">Built for modern commerce teams</span>
-            <h1>Turn operational complexity into a revenue advantage.</h1>
-            <p className="subtitle">
-              Amazon SaaS Hub connects fulfillment, merchandising, and customer support in one
-              command center that keeps your growth engine moving.
+            <span className="eyebrow">Private management review</span>
+            <h1>Control sourcing approvals and supplier visibility from one workspace.</h1>
+            <p>
+              Invite-only access for the management walkthrough. Review operations, sourcing, and supplier workstreams without public trial prompts or self-signup flow.
             </p>
-            <div className="hero-actions">
-              <button type="button" className="primary-button">
-                Start free trial
-              </button>
-              <button type="button" className="secondary-button">
-                See pricing
+            <div className="cta-row">
+              <button className="primary-button large" type="button" onClick={() => window.location.assign('/signin')}>
+                Sign In
               </button>
             </div>
-            <ul className="trust-row" aria-label="Trust statements">
-              <li>Trusted by 2,500+ brands</li>
-              <li>4.9/5 customer rating</li>
-            </ul>
           </div>
 
-          <div className="hero-visual" aria-label="Dashboard preview">
-            <div className="dashboard-card main-card">
-              <div className="card-header">
-                <span className="chip success">Live</span>
-                <span className="tiny-text">North America GMV</span>
-              </div>
-              <div className="total-block">
-                <strong>$2.84M</strong>
-                <span>+18.4% vs last month</span>
-              </div>
-              <div className="bars" aria-hidden="true">
-                <span style={{ height: '32%' }} />
-                <span style={{ height: '52%' }} />
-                <span style={{ height: '46%' }} />
-                <span style={{ height: '66%' }} />
-                <span style={{ height: '78%' }} />
-                <span style={{ height: '92%' }} />
-              </div>
+          <div className="login-panel" id="login-panel">
+            <div className="panel-header">
+              <span className="status-dot" />
+              Invite-only access
             </div>
+            <form onSubmit={signIn} className="login-form">
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={loginData.email}
+                  onChange={(event) => setLoginData((current) => ({ ...current, email: event.target.value }))}
+                  placeholder="name@company.com"
+                  autoComplete="username"
+                  required
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={loginData.password}
+                  onChange={(event) => setLoginData((current) => ({ ...current, password: event.target.value }))}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              {error ? <div className="error-banner">{error}</div> : null}
+              <button type="submit" className="primary-button full-width">Sign In</button>
+            </form>
+          </div>
+        </section>
 
-            <div className="dashboard-card side-card">
-              <span className="tiny-text">Inventory health</span>
-              <strong>98.7%</strong>
-              <div className="progress-track" aria-hidden="true">
-                <span className="progress-bar" />
+        <section className="feature-grid" id="features">
+          <article>
+            <h3>Operations visibility</h3>
+            <p>Approve supplier terms, reconcile transfers, and review discrepancies across the order lifecycle.</p>
+          </article>
+          <article>
+            <h3>Sourcing control</h3>
+            <p>Review assigned orders, submit purchase requests, and escalate mismatches before approval.</p>
+          </article>
+          <article>
+            <h3>Supplier accountability</h3>
+            <p>Confirm pricing, quantities, shipments, and receipts inside the buyer-specific portal.</p>
+          </article>
+        </section>
+
+        <section className="workflow-section" id="workflow">
+          <div className="section-heading">
+            <span className="eyebrow">Current walkthrough</span>
+            <h2>Three workspaces with clearly separated permissions</h2>
+          </div>
+          <div className="workspace-list">
+            {Object.entries(roleConfig).map(([key, config]) => (
+              <div className="workspace-card" key={key}>
+                <div className="workspace-role">{config.label}</div>
+                <h3>{config.title}</h3>
+                <p>{config.description}</p>
               </div>
-             <ul>
-                <li><span className="dot dot-blue" />Ready to ship: 72%</li>
-                <li><span className="dot dot-orange" />Low stock: 11%</li>
-             </ul>
-            </div>
-          </div>
-        </section>
-
-        <section className="stats section-shell" aria-label="Company metrics">
-          {stats.map((stat) => (
-            <article key={stat.label} className="stat-card">
-              <strong>{stat.value}</strong>
-              <span>{stat.label}</span>
-            </article>
-          ))}
-        </section>
-
-        <section id="features" className="features section-shell">
-          <div className="section-label">Why teams choose us</div>
-          <h2>Everything needed to run a faster, smarter storefront.</h2>
-          <div className="feature-grid">
-            {features.map((feature) => (
-              <article key={feature.title} className="feature-card">
-                <div className="feature-icon" aria-hidden="true">{feature.icon}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.text}</p>
-              </article>
             ))}
-          </div>
-        </section>
-
-        <section id="solutions" className="solutions section-shell">
-          <div className="section-copy">
-            <span className="section-label">Connected workflow</span>
-            <h2>Replace fragmented tools with a single operating system for commerce.</h2>
-          </div>
-          <div className="integration-panel">
-            {integrations.map((integration) => (
-              <span key={integration} className="integration-pill">
-                {integration}
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <section id="pricing" className="pricing section-shell">
-          <div className="section-label">Simple pricing</div>
-          <h2>Choose the plan that matches your growth stage.</h2>
-          <div className="pricing-grid">
-            {plans.map((plan) => (
-              <article key={plan.name} className={`price-card ${plan.featured ? 'featured' : ''}`}>
-                <div className="plan-top">
-                  <h3>{plan.name}</h3>
-                  {plan.featured ? <span className="chip popular">Popular</span> : null}
-                </div>
-                <div className="price-line">
-                  <strong>{plan.price}</strong>
-                  <span>{plan.detail}</span>
-                </div>
-                <ul>
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                <button type="button" className={plan.featured ? 'primary-button' : 'secondary-button'}>
-                  {plan.featured ? 'Get started' : 'Choose plan'}
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section id="customers" className="testimonial section-shell">
-          <blockquote>
-            “Amazon SaaS Hub gave our team a real-time picture of inventory, conversion, and customer
-            health. It replaced four tools and shortened our weekly operating cycle from 3 days to 1.”
-          </blockquote>
-          <div className="person">
-            <div className="avatar">MA</div>
-            <div>
-              <strong>Maya Alvarez</strong>
-              <span>VP of Operations, Northstar Commerce</span>
-            </div>
           </div>
         </section>
       </main>
 
-      <footer className="footer section-shell">
-        <div className="brand-wrap">
-          <div className="brand-mark">A</div>
-          <span>Amazon SaaS Hub</span>
+      <footer className="site-footer" id="contacts">
+        <div>
+          <strong>MPS Sourcing Hub</strong>
+          <span>Private management walkthrough</span>
         </div>
-        <div className="footer-links">
-          <a href="#features">Features</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#customers">Customers</a>
-        </div>
+        <div>{privateNarrative.note}</div>
       </footer>
     </div>
-  )
+  );
 }
 
-export default App
+function AuthenticatedDashboard({ session, onSignOut }) {
+  const visibleOrders = useMemo(() => getVisibleOrders(session.role, session.supplierId), [session]);
+
+  const supplierName =
+    session.role === 'supplier'
+      ? supplierCatalog.find((supplier) => supplier.id === session.supplierId)?.name || 'Supplier Portal'
+      : 'Cross-supplier view';
+
+  const clientMap = Object.fromEntries(clientCatalog.map((client) => [client.id, client]));
+  const supplierMap = Object.fromEntries(supplierCatalog.map((supplier) => [supplier.id, supplier]));
+
+  const totalSpend = visibleOrders.reduce((sum, order) => sum + Number(order.approvedCost || 0), 0);
+  const openCases = visibleOrders.filter((order) => order.status !== 'Matched').length;
+
+  return (
+    <div className="dashboard-shell">
+      <aside className="sidebar">
+        <div className="brand-wrap sidebar-brand">
+          <div className="brand-mark">MPS</div>
+          <div>
+            <div className="brand-name">Sourcing Hub</div>
+            <div className="brand-subtitle">by Area71</div>
+          </div>
+        </div>
+
+        <div className="profile-card">
+          <strong>{session.name}</strong>
+          <span>{roleConfig[session.role].label}</span>
+          <small>{session.workspace}</small>
+        </div>
+
+        <nav className="sidebar-nav">
+          <button type="button" className="nav-button active">Workspace</button>
+          <button type="button" className="nav-button">Approvals</button>
+          <button type="button" className="nav-button">Reports</button>
+        </nav>
+
+        <div className="side-panel">
+          <h4>Environment</h4>
+          <p>{privateNarrative.walkthroughScope}</p>
+        </div>
+
+        <button className="secondary-button full-width" type="button" onClick={onSignOut}>Sign out</button>
+      </aside>
+
+      <main className="dashboard-main">
+        <header className="main-header">
+          <div>
+            <span className="eyebrow">{roleConfig[session.role].label}</span>
+            <h1>{roleConfig[session.role].title}</h1>
+          </div>
+          <div className="header-chips">
+            <span className="chip">{session.location}</span>
+            <span className="chip">{supplierName}</span>
+          </div>
+        </header>
+
+        <section className="stats-grid">
+          <article className="stat-card">
+            <span>Total orders</span>
+            <strong>{visibleOrders.length}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Open cases</span>
+            <strong>{openCases}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Approved value</span>
+            <strong>{currency.format(totalSpend)}</strong>
+          </article>
+        </section>
+
+        <section className="cards-row">
+          <div className="info-card wide">
+            <div className="card-header">
+              <h3>Order pipeline</h3>
+              <span className="badge">{session.role === 'supplier' ? 'Assigned orders' : 'Review queue'}</span>
+            </div>
+            <div className="orders-list">
+              {visibleOrders.map((order) => {
+                const client = clientMap[order.clientId];
+                const supplier = supplierMap[order.supplierId];
+                const isOperationReview = session.role === 'operations' && order.status === 'Needs review';
+                const canApprove = session.role === 'operations' && order.status !== 'Matched';
+
+                return (
+                  <div key={order.id} className="order-card">
+                    <div className="order-topline">
+                      <div>
+                        <strong>{order.id}</strong>
+                        <span>{client?.name}</span>
+                      </div>
+                      <span className={`status-pill ${order.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <p className="order-title">{order.title}</p>
+                    <div className="order-meta">
+                      <span>{supplier?.name}</span>
+                      <span>{order.qty} units</span>
+                      <span>{currency.format(order.approvedCost)}</span>
+                    </div>
+                    <div className="order-detail-row">
+                      <div>
+                        <small>Sourcing report</small>
+                        <strong>{currency.format(order.sourcingReport)}</strong>
+                      </div>
+                      <div>
+                        <small>Verified transfer</small>
+                        <strong>{currency.format(order.verifiedTransfer)}</strong>
+                      </div>
+                      <div>
+                        <small>Supplier receipt</small>
+                        <strong>{currency.format(order.supplierReceipt)}</strong>
+                      </div>
+                    </div>
+                    {order.varianceChecks ? (
+                      <div className="variance-box">
+                        {order.varianceChecks.map((check) => (
+                          <div className="variance-item" key={check.label}>
+                            <span>{check.label}</span>
+                            <strong>{currency.format(check.amount)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="workflow-note">{order.workflowNote}</p>
+                    {session.role === 'operations' && (
+                      <button type="button" className="primary-button narrow" disabled={!canApprove}>
+                        {canApprove ? 'Approve supplier terms' : 'Review complete'}
+                      </button>
+                    )}
+                    {session.role === 'sourcing' && (
+                      <button type="button" className="primary-button narrow">
+                        {order.status === 'Needs review' ? 'Submit report' : 'Create purchase request'}
+                      </button>
+                    )}
+                    {session.role === 'supplier' && (
+                      <button type="button" className="primary-button narrow">
+                        {order.status === 'Pending supplier receipt' ? 'Submit receipt' : 'Confirm shipment'}
+                      </button>
+                    )}
+                    {isOperationReview && <div className="review-callout">Needs review</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="info-card narrow">
+            <div className="card-header">
+              <h3>Client records</h3>
+              <span className="badge">Fictional</span>
+            </div>
+            <ul className="client-list">
+              {clientCatalog.map((client) => (
+                <li key={client.id}>
+                  <strong>{client.name}</strong>
+                  <span>{client.segment}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="card-header secondary-space">
+              <h3>Suppliers</h3>
+              <span className="badge">Private</span>
+            </div>
+            <ul className="client-list">
+              {supplierCatalog.map((supplier) => (
+                <li key={supplier.id}>
+                  <strong>{supplier.name}</strong>
+                  <span>{supplier.status}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+export default App;

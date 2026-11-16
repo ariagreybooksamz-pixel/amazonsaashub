@@ -1,16 +1,45 @@
-# React + Vite
+# MPS Sourcing Hub by Area71
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Private management walkthrough for operations, sourcing, and supplier review without public trial or self-signup prompts.
 
-Currently, two official plugins are available:
+## Local setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Copy `.env.example` to `.env.local`.
+2. Replace the placeholder values with your invite-only walkthrough credentials.
+3. Run the setup script:
 
-## React Compiler
+```bash
+npm install
+npm run setup:walkthrough
+npm run dev -- --host 0.0.0.0
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Production build
 
-## Expanding the Oxlint configuration
+```bash
+npm install
+npm run build
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Vercel Preview deployment
+
+1. Push the repo to GitHub.
+2. In Vercel, import the repository.
+3. Set the project framework to Vite.
+4. Add the same environment variables used in `.env.local`:
+   - `VITE_WALKTHROUGH_OPERATIONS_EMAIL`
+   - `VITE_WALKTHROUGH_OPERATIONS_PASSWORD`
+   - `VITE_WALKTHROUGH_SOURCING_EMAIL`
+   - `VITE_WALKTHROUGH_SOURCING_PASSWORD`
+   - `VITE_WALKTHROUGH_SUPPLIER_EMAIL`
+   - `VITE_WALKTHROUGH_SUPPLIER_PASSWORD`
+   - `WALKTHROUGH_ENV=staging`
+5. Deploy a Preview environment and share the invite-only sign-in page with management.
+
+## Access model
+
+- Operations Team: full walkthrough order review, approval, and discrepancy handling
+- Sourcing Team: assigned order triage, purchase request creation, and payment reporting
+- Supplier: assigned purchase records, price confirmation, shipment detail updates, and receipt submission
+
+The public landing page intentionally contains no trial, demo, or self-signup link.
