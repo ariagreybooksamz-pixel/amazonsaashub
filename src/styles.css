@@ -310,14 +310,23 @@ button {
   box-shadow: 0 0 18px rgba(31, 157, 91, 0.4);
 }
 
-.login-form {
+.login-form,
+.supplier-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
 }
 
-.login-form label {
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.login-form label,
+.supplier-form label {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -326,7 +335,10 @@ button {
   width: 100%;
 }
 
-.login-form input {
+.login-form input,
+.login-form select,
+.supplier-form input,
+.supplier-form select {
   width: 100%;
   background: #f7f9fd;
   border: 1px solid var(--border);
@@ -674,6 +686,13 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
 }
 
 .approval-header,
