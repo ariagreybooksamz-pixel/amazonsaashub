@@ -406,6 +406,39 @@ function AuthenticatedDashboard({
     () => orders.filter((order) => order.supplierQuote && order.supplierQuoteStatus !== 'approved'),
     [orders],
   );
+  const roleApprovalOrders = useMemo(() => {
+    if (session.role === 'operations') {
+      return approvalOrders;
+    }
+
+    if (session.role === 'sourcing') {
+      return visibleOrders.filter(
+        (order) =>
+          order.status === 'Awaiting supplier approval'
+          || order.status === 'Needs review'
+          || order.status === 'Report mismatch'
+          || order.status === 'Pending supplier receipt'
+          || Boolean(order.supplierQuote),
+      );
+    }
+
+    if (session.role === 'supplier') {
+      return visibleOrders.filter(
+        (order) => order.supplierId === session.supplierId && (Boolean(order.supplierQuote) || order.status === 'Awaiting supplier approval' || order.status === 'Pending supplier receipt'),
+      );
+    }
+
+    return [];
+  }, [approvalOrders, session.role, session.supplierId, visibleOrders]);
+
+  const roleReportOrders = useMemo(() => {
+    if (session.role === 'operations') {
+      return orders;
+    }
+
+    return visibleOrders.filter((order) => order.status !== 'Matched');
+  }, [orders, session.role, visibleOrders]);
+
   const totalApprovedValue = visibleOrders.reduce((sum, order) => sum + Number(order.approvedCost || order.clientAmountDue || 0), 0);
   const openCases = visibleOrders.filter((order) => order.status !== 'Matched').length;
 
@@ -1082,77 +1115,91 @@ function AuthenticatedDashboard({
           </section>
         )}
 
-        {activeView === 'approvals' && session.role === 'operations' && (
+        {activeView === 'approvals' && ['operations', 'sourcing', 'supplier'].includes(session.role) && (
           <section className="content-panel approvals-panel">
             <div className="card-header">
-              <h3>Supplier approvals</h3>
-              <span className="badge">{approvalOrders.length} awaiting review</span>
+              <h3>{session.role === 'operations' ? 'Supplier approvals' : session.role === 'supplier' ? 'My quote approvals' : 'Approval queue'}</h3>
+              <span className="badge">{roleApprovalOrders.length} awaiting review</span>
             </div>
-            {approvalOrders.length === 0 ? (
-              <div className="empty-state">No supplier-confirmed quotes are awaiting approval.</div>
+            {roleApprovalOrders.length === 0 ? (
+              <div className="empty-state">No records are waiting for approval in this workspace.</div>
             ) : (
               <div className="approval-list">
-                {approvalOrders.map((order) => (
-                  <div key={order.id} className="approval-card">
-                    <div>
-                      <div className="approval-header">
-                        <strong>{order.id}</strong>
-                        <span className="status-pill needs-review">{order.supplierQuoteStatus}</span>
+                {roleApprovalOrders.map((order) => {
+                  const quote = order.supplierQuote;
+
+                  return (
+                    <div key={order.id} className="approval-card">
+                      <div>
+                        <div className="approval-header">
+                          <strong>{order.id}</strong>
+                          <span className="status-pill needs-review">{order.supplierQuoteStatus || order.status}</span>
+                        </div>
+                        <p>{clientMap[order.clientId]?.name}</p>
+                        <p>{supplierMap[order.supplierId]?.name}</p>
                       </div>
-                      <p>{clientMap[order.clientId]?.name}</p>
-                      <p>{supplierMap[order.supplierId]?.name}</p>
+
+                      {quote ? (
+                        <>
+                          <div className="approval-metrics">
+                            <div>
+                              <span>Order qty</span>
+                              <strong>{order.qty} units</strong>
+                            </div>
+                            <div>
+                              <span>Quote total</span>
+                              <strong>{quote.currency} {formatMoney(quote.total, quote.currency)}</strong>
+                            </div>
+                            <div>
+                              <span>Submitted</span>
+                              <strong>{new Date(quote.submittedAt || Date.now()).toLocaleDateString()}</strong>
+                            </div>
+                          </div>
+                          <div className="approval-metrics">
+                            <div>
+                              <span>Qty received</span>
+                              <strong>{quote.quantityReceived ?? order.supplierReceipt ?? 0} units</strong>
+                            </div>
+                            <div>
+                              <span>Payment received</span>
+                              <strong>{quote.currency} {formatMoney(quote.amountReceived ?? 0, quote.currency)}</strong>
+                            </div>
+                            <div>
+                              <span>Payment status</span>
+                              <strong>{quote.paymentStatus || 'paid'}</strong>
+                            </div>
+                          </div>
+                          <p className="quote-note">
+                            <strong>Reference:</strong> {quote.reference || 'Supplier confirmation'}
+                          </p>
+                          <p className="quote-note">{quote.note || 'Supplier has submitted a confirmation for this order.'}</p>
+                        </>
+                      ) : (
+                        <div className="empty-state compact">Awaiting supplier confirmation.</div>
+                      )}
+
+                      {session.role === 'operations' && quote && (
+                        <div className="approval-actions">
+                          <button type="button" className="primary-button" onClick={() => handleQuoteDecision(order, 'approve')}>
+                            Approve quote
+                          </button>
+                          <button type="button" className="secondary-button" onClick={() => handleQuoteDecision(order, 'return')}>
+                            Return for correction
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="approval-metrics">
-                      <div>
-                        <span>Order qty</span>
-                        <strong>{order.qty} units</strong>
-                      </div>
-                      <div>
-                        <span>Quote total</span>
-                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.total, order.supplierQuote.currency)}</strong>
-                      </div>
-                      <div>
-                        <span>Submitted</span>
-                        <strong>{new Date(order.supplierQuote.submittedAt).toLocaleDateString()}</strong>
-                      </div>
-                    </div>
-                    <div className="approval-metrics">
-                      <div>
-                        <span>Qty received</span>
-                        <strong>{order.supplierQuote.quantityReceived ?? order.supplierReceipt ?? 0} units</strong>
-                      </div>
-                      <div>
-                        <span>Payment received</span>
-                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.amountReceived ?? 0, order.supplierQuote.currency)}</strong>
-                      </div>
-                      <div>
-                        <span>Payment status</span>
-                        <strong>{order.supplierQuote.paymentStatus || 'paid'}</strong>
-                      </div>
-                    </div>
-                    <p className="quote-note">
-                      <strong>Reference:</strong> {order.supplierQuote.reference || 'Supplier confirmation'}
-                    </p>
-                    <p className="quote-note">{order.supplierQuote.note}</p>
-                    <div className="approval-actions">
-                      <button type="button" className="primary-button" onClick={() => handleQuoteDecision(order, 'approve')}>
-                        Approve quote
-                      </button>
-                      <button type="button" className="secondary-button" onClick={() => handleQuoteDecision(order, 'return')}>
-                        Return for correction
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
         )}
 
-        {activeView === 'reports' && session.role === 'operations' && (
+        {activeView === 'reports' && ['operations', 'sourcing', 'supplier'].includes(session.role) && (
           <section className="content-panel reports-panel">
             <div className="card-header">
-              <h3>Reconciliation report</h3>
+              <h3>{session.role === 'operations' ? 'Reconciliation report' : 'Status report'}</h3>
               <span className="badge">Current data</span>
             </div>
             <div className="report-table">
@@ -1164,7 +1211,7 @@ function AuthenticatedDashboard({
                 <span>Supplier receipt</span>
                 <span>Status</span>
               </div>
-              {orders.map((order) => (
+              {roleReportOrders.map((order) => (
                 <div className="report-row" key={order.id}>
                   <strong>{order.id}</strong>
                   <span>{formatMoney(order.approvedCost, order.clientCurrency || 'USD')}</span>
