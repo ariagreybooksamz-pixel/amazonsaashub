@@ -682,57 +682,96 @@ function AuthenticatedDashboard({
         ) : null}
 
         {session.role === 'sourcing' && activeView === 'workspace' && (
-          <section className="content-panel approvals-panel">
-            <div className="card-header">
-              <h3>Create purchase order</h3>
-              <span className="badge">Sourcing form</span>
-            </div>
-            <form className="login-form" onSubmit={handleCreatePurchaseOrder}>
-              <div className="field-grid">
-                <label>
-                  Client
-                  <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
-                    {clientCatalog.map((client) => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
+          <>
+            <section className="content-panel approvals-panel">
+              <div className="card-header">
+                <h3>Create purchase order</h3>
+                <span className="badge">Sourcing form</span>
+              </div>
+              <form className="login-form" onSubmit={handleCreatePurchaseOrder}>
+                <div className="field-grid">
+                  <label>
+                    Client name
+                    <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
+                      {clientCatalog.map((client) => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Supplier name
+                    <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
+                      {supplierCatalog.map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Product name
+                    <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} />
+                  </label>
+                  <label>
+                    Quantity
+                    <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Client amount due
+                    <input type="number" min="0" step="0.01" value={purchaseDraft.amountDue} onChange={(event) => setPurchaseDraft((current) => ({ ...current, amountDue: Number(event.target.value) }))} />
+                  </label>
+                  <label>
+                    Currency
+                    <select value={purchaseDraft.currency} onChange={(event) => setPurchaseDraft((current) => ({ ...current, currency: event.target.value }))}>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                    </select>
+                  </label>
+                </div>
+                <button type="submit" className="primary-button full-width">Save purchase order</button>
+              </form>
+            </section>
+
+            <section className="content-panel approvals-panel">
+              <div className="card-header">
+                <h3>Saved purchase orders</h3>
+                <span className="badge">{visibleOrders.length} records</span>
+              </div>
+
+              {visibleOrders.length === 0 ? (
+                <div className="empty-state">No purchase orders have been saved yet.</div>
+              ) : (
+                <div className="sourcing-table-wrap">
+                  <div className="sourcing-table">
+                    <div className="sourcing-table-header">
+                      <span>Order</span>
+                      <span>Client</span>
+                      <span>Supplier</span>
+                      <span>Product</span>
+                      <span>Qty</span>
+                      <span>Amount</span>
+                      <span>Status</span>
+                    </div>
+
+                    {visibleOrders.map((order) => (
+                      <div className="sourcing-table-row" key={order.id}>
+                        <span>{order.id}</span>
+                        <span>{clientMap[order.clientId]?.name || 'Unknown client'}</span>
+                        <span>{supplierMap[order.supplierId]?.name || 'Unknown supplier'}</span>
+                        <span>{order.title}</span>
+                        <span>{order.qty}</span>
+                        <span>{formatMoney(order.clientAmountDue ?? order.approvedCost ?? 0, order.clientCurrency || 'USD')}</span>
+                        <span>{renderStatusPill(order.status)}</span>
+                      </div>
                     ))}
-                  </select>
-                </label>
-                <label>
-                  Supplier
-                  <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
-                    {supplierCatalog.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="field-grid">
-                <label>
-                  Product
-                  <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} />
-                </label>
-                <label>
-                  Quantity
-                  <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
-                </label>
-              </div>
-              <div className="field-grid">
-                <label>
-                  Client amount due
-                  <input type="number" min="0" step="0.01" value={purchaseDraft.amountDue} onChange={(event) => setPurchaseDraft((current) => ({ ...current, amountDue: Number(event.target.value) }))} />
-                </label>
-                <label>
-                  Currency
-                  <select value={purchaseDraft.currency} onChange={(event) => setPurchaseDraft((current) => ({ ...current, currency: event.target.value }))}>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                  </select>
-                </label>
-              </div>
-              <button type="submit" className="primary-button full-width">Save purchase order</button>
-            </form>
-          </section>
+                  </div>
+                </div>
+              )}
+            </section>
+          </>
         )}
 
         {session.role === 'supplier' && activeView === 'workspace' && (
