@@ -356,6 +356,7 @@ function AuthenticatedDashboard({
   const [supplierOptions, setSupplierOptions] = useState(supplierCatalog);
   const [newClientName, setNewClientName] = useState('');
   const [newSupplierName, setNewSupplierName] = useState('');
+  const [sourcingMenu, setSourcingMenu] = useState('client');
   const [purchaseDraft, setPurchaseDraft] = useState({
     clientId: clientCatalog[0]?.id ?? '',
     supplierId: supplierCatalog[0]?.id ?? '',
@@ -772,111 +773,148 @@ function AuthenticatedDashboard({
                 <span className="badge">Sourcing form</span>
               </div>
               <form className="login-form" onSubmit={handleCreatePurchaseOrder}>
-                <div className="field-grid">
-                  <label>
-                    Client name
-                    <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
-                      {clientOptions.map((client) => (
-                        <option key={client.id} value={client.id}>{client.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Supplier name
-                    <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
-                      {supplierOptions.map((supplier) => (
-                        <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                      ))}
-                    </select>
-                  </label>
+                <div className="sourcing-menu-layout">
+                  <aside className="sourcing-left-menu" aria-label="Sourcing intake sections">
+                    <button
+                      type="button"
+                      className={`sourcing-menu-button ${sourcingMenu === 'client' ? 'active' : ''}`}
+                      onClick={() => setSourcingMenu('client')}
+                    >
+                      Client details
+                    </button>
+                    <button
+                      type="button"
+                      className={`sourcing-menu-button ${sourcingMenu === 'supplier' ? 'active' : ''}`}
+                      onClick={() => setSourcingMenu('supplier')}
+                    >
+                      Supplier details
+                    </button>
+                  </aside>
+
+                  <div className="sourcing-form-content">
+                    {sourcingMenu === 'client' && (
+                      <div className="sourcing-form-section">
+                        <h4>Client details</h4>
+                        <div className="field-grid">
+                          <label>
+                            Existing client
+                            <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
+                              {clientOptions.map((client) => (
+                                <option key={client.id} value={client.id}>{client.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Add new client
+                            <input value={newClientName} onChange={(event) => setNewClientName(event.target.value)} placeholder="Create a new client" />
+                          </label>
+                        </div>
+                        <div className="field-grid">
+                          <label>
+                            Client name
+                            <input value={purchaseDraft.clientName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientName: event.target.value }))} placeholder="Client full name" />
+                          </label>
+                          <label>
+                            Client phone
+                            <input value={purchaseDraft.clientPhone} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientPhone: event.target.value }))} placeholder="(555) 123-4567" />
+                          </label>
+                        </div>
+                        <div className="field-grid">
+                          <label>
+                            Client email
+                            <input type="email" value={purchaseDraft.clientEmail} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientEmail: event.target.value }))} placeholder="client@company.com" />
+                          </label>
+                          <label>
+                            Product selected
+                            <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Choose product" />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {sourcingMenu === 'supplier' && (
+                      <div className="sourcing-form-section">
+                        <h4>Supplier details</h4>
+                        <div className="field-grid">
+                          <label>
+                            Existing supplier
+                            <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
+                              {supplierOptions.map((supplier) => (
+                                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Add new supplier
+                            <input value={newSupplierName} onChange={(event) => setNewSupplierName(event.target.value)} placeholder="Create a new supplier" />
+                          </label>
+                        </div>
+                        <div className="field-grid">
+                          <label>
+                            Supplier name
+                            <input value={purchaseDraft.supplierName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierName: event.target.value }))} placeholder="Supplier company" />
+                          </label>
+                          <label>
+                            Product list
+                            <input value={purchaseDraft.supplierProductList} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierProductList: event.target.value }))} placeholder="List of supplier products" />
+                          </label>
+                        </div>
+                        <div className="field-grid">
+                          <label>
+                            Category
+                            <input value={purchaseDraft.supplierCategory} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierCategory: event.target.value }))} placeholder="Category" />
+                          </label>
+                          <label>
+                            Supplier price
+                            <input type="number" min="0" step="0.01" value={purchaseDraft.supplierPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierPrice: Number(event.target.value) }))} />
+                          </label>
+                        </div>
+                        <div className="field-grid">
+                          <label>
+                            Sample image URL
+                            <input value={purchaseDraft.sampleImage} onChange={(event) => setPurchaseDraft((current) => ({ ...current, sampleImage: event.target.value }))} placeholder="https://.../image.jpg" />
+                          </label>
+                          <label>
+                            &nbsp;
+                            <span className="muted-text">Supplier intake</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="sourcing-form-section order-details-section">
+                      <h4>Order details</h4>
+                      <div className="field-grid">
+                        <label>
+                          Product price
+                          <input type="number" min="0" step="0.01" value={purchaseDraft.productPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, productPrice: Number(event.target.value) }))} />
+                        </label>
+                        <label>
+                          Order amount
+                          <input type="number" min="0" step="0.01" value={purchaseDraft.orderAmount || purchaseDraft.amountDue} onChange={(event) => {
+                            const nextAmount = Number(event.target.value);
+                            setPurchaseDraft((current) => ({ ...current, orderAmount: nextAmount, amountDue: nextAmount }));
+                          }} />
+                        </label>
+                      </div>
+                      <div className="field-grid">
+                        <label>
+                          Quantity
+                          <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
+                        </label>
+                        <label>
+                          Currency
+                          <select value={purchaseDraft.currency} onChange={(event) => setPurchaseDraft((current) => ({ ...current, currency: event.target.value }))}>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="field-grid">
-                  <label>
-                    Add new client
-                    <input value={newClientName} onChange={(event) => setNewClientName(event.target.value)} placeholder="Create a new client" />
-                  </label>
-                  <label>
-                    Add new supplier
-                    <input value={newSupplierName} onChange={(event) => setNewSupplierName(event.target.value)} placeholder="Create a new supplier" />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Client name
-                    <input value={purchaseDraft.clientName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientName: event.target.value }))} placeholder="Client full name" />
-                  </label>
-                  <label>
-                    Client phone
-                    <input value={purchaseDraft.clientPhone} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientPhone: event.target.value }))} placeholder="(555) 123-4567" />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Client email
-                    <input type="email" value={purchaseDraft.clientEmail} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientEmail: event.target.value }))} placeholder="client@company.com" />
-                  </label>
-                  <label>
-                    Product name
-                    <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Choose product" />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Product price
-                    <input type="number" min="0" step="0.01" value={purchaseDraft.productPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, productPrice: Number(event.target.value) }))} />
-                  </label>
-                  <label>
-                    Order amount
-                    <input type="number" min="0" step="0.01" value={purchaseDraft.orderAmount || purchaseDraft.amountDue} onChange={(event) => {
-                      const nextAmount = Number(event.target.value);
-                      setPurchaseDraft((current) => ({ ...current, orderAmount: nextAmount, amountDue: nextAmount }));
-                    }} />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Quantity
-                    <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
-                  </label>
-                  <label>
-                    Currency
-                    <select value={purchaseDraft.currency} onChange={(event) => setPurchaseDraft((current) => ({ ...current, currency: event.target.value }))}>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Supplier name
-                    <input value={purchaseDraft.supplierName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierName: event.target.value }))} placeholder="Supplier company" />
-                  </label>
-                  <label>
-                    Product list
-                    <input value={purchaseDraft.supplierProductList} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierProductList: event.target.value }))} placeholder="List of supplier products" />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Category
-                    <input value={purchaseDraft.supplierCategory} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierCategory: event.target.value }))} placeholder="Category" />
-                  </label>
-                  <label>
-                    Supplier price
-                    <input type="number" min="0" step="0.01" value={purchaseDraft.supplierPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierPrice: Number(event.target.value) }))} />
-                  </label>
-                </div>
-                <div className="field-grid">
-                  <label>
-                    Sample image URL
-                    <input value={purchaseDraft.sampleImage} onChange={(event) => setPurchaseDraft((current) => ({ ...current, sampleImage: event.target.value }))} placeholder="https://.../image.jpg" />
-                  </label>
-                  <label>
-                    &nbsp;
-                    <span className="muted-text">Sourcing intake ready for review</span>
-                  </label>
-                </div>
+
                 <button type="submit" className="primary-button full-width">Save purchase order</button>
               </form>
             </section>
