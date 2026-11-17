@@ -29,6 +29,12 @@ export const roleConfig = {
     description: 'Confirms pricing, shipments, and receipt details for assigned orders.',
     permissions: ['confirm_price', 'confirm_quantity', 'submit_amount_received', 'update_shipment_details'],
   },
+  client: {
+    label: 'Client',
+    title: 'Client Workspace',
+    description: 'Views only the owned order quantity and client-facing amount due.',
+    permissions: ['view_owned_order_amounts', 'view_owned_quantity'],
+  },
 };
 
 export const supplierCatalog = [
@@ -82,6 +88,16 @@ export const accountCatalog = [
     workspace: 'Northfield Packaging Portal',
     location: 'Cincinnati, OH',
     supplierId: 'supplier-northfield',
+  },
+  {
+    id: 'client-team',
+    role: 'client',
+    name: 'Rachel Kim',
+    email: getWalkthroughValue('VITE_WALKTHROUGH_CLIENT_EMAIL', 'client@area71.com'),
+    password: getWalkthroughValue('VITE_WALKTHROUGH_CLIENT_PASSWORD', 'client123'),
+    workspace: 'Harbor Foods Client Workspace',
+    location: 'Boston, MA',
+    clientId: 'client-harbor-foods',
   },
 ];
 

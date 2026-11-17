@@ -13,10 +13,11 @@ const sessionStorageKey = 'mps-sourcing-hub-user';
 const ordersStorageKey = 'mps-sourcing-orders';
 const approvalStorageKey = 'mps-sourcing-approvals';
 
-const currency = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-});
+const formatMoney = (amount, currencyCode = 'USD') =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currencyCode || 'USD',
+  }).format(Number(amount || 0));
 
 const buildApprovalQueue = () => [
   {
@@ -36,6 +37,15 @@ const buildApprovalQueue = () => [
 const buildDefaultOrders = () =>
   purchaseOrders.map((order) => ({
     ...order,
+    clientAmountDue: order.clientAmountDue ?? order.approvedCost ?? order.sourcingReport ?? 0,
+    clientCurrency: order.clientCurrency ?? 'USD',
+    supplierQuote: order.supplierQuote ?? null,
+    supplierQuoteStatus: order.supplierQuoteStatus ?? 'awaiting_quote',
+    supplierQuoteNeedsApproval: order.supplierQuoteNeedsApproval ?? false,
+    approvedSupplierTotal: order.approvedSupplierTotal ?? null,
+    approvedSupplierCurrency: order.approvedSupplierCurrency ?? null,
+    approvedBy: order.approvedBy ?? null,
+    approvedAt: order.approvedAt ?? null,
     supplierReceiptLabel: order.supplierReceipt > 0 ? 'Confirmed' : 'Pending confirmation',
   }));
 
@@ -65,12 +75,24 @@ const getStoredApprovals = () => {
   }
 };
 
-const getVisibleOrders = (role, supplierId, orders) => {
+const getVisibleOrders = (role, supplierId, clientId, orders) => {
   if (role === 'operations') return orders;
   if (role === 'sourcing') return orders.filter((order) => order.status !== 'Matched');
   if (role === 'supplier') return orders.filter((order) => order.supplierId === supplierId);
+  if (role === 'client') return orders.filter((order) => order.clientId === clientId);
   return [];
 };
+
+const getClientVisibleOrders = (clientId, orders) =>
+  orders
+    .filter((order) => order.clientId === clientId)
+    .map((order) => ({
+      id: order.id,
+      title: order.title,
+      qty: order.qty,
+      clientAmountDue: order.clientAmountDue ?? order.approvedCost ?? order.sourcingReport ?? 0,
+      clientCurrency: order.clientCurrency ?? 'USD',
+    }));
 
 const getActionState = (status) => {
   if (status === 'Matched') return 'matched';
@@ -330,6 +352,15 @@ function AuthenticatedDashboard({
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusMessage, setStatusMessage] = useState({ type: 'info', text: '' });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [purchaseDraft, setPurchaseDraft] = useState({
+    clientId: clientCatalog[0]?.id ?? '',
+    supplierId: supplierCatalog[0]?.id ?? '',
+    title: 'Seasonal replenishment',
+    qty: 100,
+    amountDue: 850,
+    currency: 'USD',
+  });
+  const [quoteDrafts, setQuoteDrafts] = useState({});
 
   const normalizedPath = location.pathname.replace(/\/+$/, '');
   const activeView = normalizedPath.includes('/approvals')
@@ -338,13 +369,161 @@ function AuthenticatedDashboard({
       ? 'reports'
       : 'workspace';
 
-  const visibleOrders = useMemo(() => getVisibleOrders(session.role, session.supplierId, orders), [session, orders]);
+  useEffect(() => {
+    if (session.role === 'client' && (activeView === 'approvals' || activeView === 'reports')) {
+      navigate(`/workspace/${session.role}`, { replace: true });
+    }
+  }, [session.role, activeView, navigate]);
+
+  const visibleOrders = useMemo(
+    () => getVisibleOrders(session.role, session.supplierId, session.clientId, orders),
+    [session, orders],
+  );
+  const clientVisibleOrders = useMemo(
+    () => getClientVisibleOrders(session.clientId, orders),
+    [session.clientId, orders],
+  );
   const clientMap = Object.fromEntries(clientCatalog.map((client) => [client.id, client]));
   const supplierMap = Object.fromEntries(supplierCatalog.map((supplier) => [supplier.id, supplier]));
 
   const approvalEligible = approvalQueue.filter((quote) => quote.eligible && quote.supplierId);
-  const totalApprovedValue = visibleOrders.reduce((sum, order) => sum + Number(order.approvedCost || 0), 0);
+  const approvalOrders = useMemo(
+    () => orders.filter((order) => order.supplierQuote && order.supplierQuoteStatus !== 'approved'),
+    [orders],
+  );
+  const totalApprovedValue = visibleOrders.reduce((sum, order) => sum + Number(order.approvedCost || order.clientAmountDue || 0), 0);
   const openCases = visibleOrders.filter((order) => order.status !== 'Matched').length;
+
+  const handleCreatePurchaseOrder = (event) => {
+    event.preventDefault();
+
+    const qty = Number(purchaseDraft.qty);
+    const amountDue = Number(purchaseDraft.amountDue);
+
+    if (!purchaseDraft.clientId || !purchaseDraft.supplierId || !purchaseDraft.title || !qty || !amountDue) {
+      setStatusMessage({ type: 'error', text: 'Provide a client, supplier, product, quantity, and client amount due.' });
+      return;
+    }
+
+    const orderId = `MPS-${Date.now().toString().slice(-5)}`;
+    const nextOrder = {
+      id: orderId,
+      clientId: purchaseDraft.clientId,
+      supplierId: purchaseDraft.supplierId,
+      title: purchaseDraft.title,
+      status: 'Pending supplier quote',
+      qty,
+      unitPrice: Number((amountDue / qty).toFixed(2)) || 0,
+      approvedCost: amountDue,
+      clientAmountDue: amountDue,
+      clientCurrency: purchaseDraft.currency,
+      sourcingReport: amountDue,
+      verifiedTransfer: 0,
+      supplierReceipt: 0,
+      supplierQuote: null,
+      supplierQuoteStatus: 'awaiting_quote',
+      workflowNote: 'Sourcing saved the purchase request and client-facing amount due. Awaiting supplier quote.',
+      actionLabel: 'Awaiting quote',
+    };
+
+    setOrders((current) => [nextOrder, ...current]);
+    setStatusMessage({ type: 'success', text: `Purchase order ${orderId} was saved for ${clientMap[purchaseDraft.clientId]?.name}.` });
+    setPurchaseDraft({
+      clientId: clientCatalog[0]?.id ?? '',
+      supplierId: supplierCatalog[0]?.id ?? '',
+      title: 'Seasonal replenishment',
+      qty: 100,
+      amountDue: 850,
+      currency: 'USD',
+    });
+  };
+
+  const handleSubmitSupplierQuote = (event, order) => {
+    event.preventDefault();
+
+    const draft = quoteDrafts[order.id] || {};
+    const unitCost = Number(draft.unitCost || 0);
+    const quoteCurrency = draft.currency || 'USD';
+
+    if (!unitCost || unitCost <= 0) {
+      setStatusMessage({ type: 'error', text: 'Enter a valid supplier unit cost before submitting the quote.' });
+      return;
+    }
+
+    const quoteTotal = Number((unitCost * Number(order.qty || 0)).toFixed(2));
+    const submittedAt = new Date().toISOString();
+
+    setOrders((current) =>
+      current.map((item) =>
+        item.id === order.id
+          ? {
+              ...item,
+              supplierQuote: {
+                id: `QUOTE-${Date.now().toString().slice(-5)}`,
+                unitCost,
+                currency: quoteCurrency,
+                total: quoteTotal,
+                submittedBy: session.name,
+                submittedAt,
+                note: draft.note || 'Supplier quote submitted for approval.',
+              },
+              supplierQuoteStatus: 'pending',
+              supplierQuoteNeedsApproval: true,
+              status: 'Awaiting supplier approval',
+              workflowNote: `Supplier quote submitted on ${submittedAt.slice(0, 10)}. Client amount due remains unchanged.`,
+            }
+          : item,
+      ),
+    );
+
+    setStatusMessage({ type: 'success', text: `Supplier quote for ${order.id} submitted. Operations can now approve or return it.` });
+  };
+
+  const handleQuoteDecision = (order, decision) => {
+    const quote = order.supplierQuote;
+    if (!quote) {
+      return;
+    }
+
+    setOrders((current) =>
+      current.map((item) => {
+        if (item.id !== order.id) {
+          return item;
+        }
+
+        const approvedAt = new Date().toISOString();
+
+        if (decision === 'approve') {
+          return {
+            ...item,
+            supplierQuoteStatus: 'approved',
+            approvedSupplierTotal: quote.total,
+            approvedSupplierCurrency: quote.currency,
+            approvedBy: session.name,
+            approvedAt,
+            status: 'Approved',
+            workflowNote: `Approved by ${session.name} on ${approvedAt.slice(0, 10)}. Supplier quote total accepted for ${quote.currency} ${quote.total}.`,
+          };
+        }
+
+        return {
+          ...item,
+          supplierQuoteStatus: 'returned',
+          supplierQuoteNeedsApproval: true,
+          quoteCorrectionNote: `Returned for correction by ${session.name} on ${approvedAt.slice(0, 10)}.`,
+          status: 'Needs review',
+          workflowNote: `Supplier quote returned for correction by ${session.name}. Client amount due remains unchanged until a new quote is approved.`,
+        };
+      }),
+    );
+
+    setStatusMessage({
+      type: decision === 'approve' ? 'success' : 'error',
+      text: decision === 'approve'
+        ? `Quote for ${order.id} approved by ${session.name}.`
+        : `Quote for ${order.id} returned for correction.`,
+    });
+  };
 
   const handleApproveQuote = async (quote) => {
     if (session.role !== 'operations') {
@@ -363,22 +542,27 @@ function AuthenticatedDashboard({
     try {
       await new Promise((resolve) => setTimeout(resolve, 450));
 
-      const nextOrders = orders.map((order) => {
-        if (order.id === quote.orderId) {
-          return {
-            ...order,
-            status: 'Approved',
-            supplierReceiptLabel: order.supplierReceipt > 0 ? 'Confirmed' : 'Pending confirmation',
-            workflowNote: `Approved by Operations on ${new Date().toISOString().slice(0, 10)}. Supplier quote accepted.`,
-          };
-        }
-        return order;
-      });
+      setOrders((current) =>
+        current.map((item) => {
+          if (item.id !== quote.orderId) {
+            return item;
+          }
 
-      setOrders(nextOrders);
-      setApprovalQueue((current) =>
-        current.filter((item) => item.id !== quote.id),
+          return {
+            ...item,
+            status: 'Approved',
+            supplierQuoteStatus: 'approved',
+            approvedSupplierTotal: item.supplierQuote?.total ?? item.approvedCost,
+            approvedSupplierCurrency: item.supplierQuote?.currency || 'USD',
+            approvedBy: session.name,
+            approvedAt: new Date().toISOString(),
+            supplierReceiptLabel: item.supplierReceipt > 0 ? 'Confirmed' : 'Pending confirmation',
+            workflowNote: `Approved by Operations on ${new Date().toISOString().slice(0, 10)}. Supplier quote accepted. Client amount due unchanged.`,
+          };
+        }),
       );
+
+      setApprovalQueue((current) => current.filter((item) => item.id !== quote.id));
       setStatusMessage({ type: 'success', text: `Approval saved for ${quote.orderId}. The order was refreshed.` });
       navigate(`/workspace/${session.role}`);
     } catch {
@@ -417,20 +601,12 @@ function AuthenticatedDashboard({
             <span>{order.qty}</span>
           </div>
           <div className="order-badge-col">
-            <span className="row-label">Approved</span>
-            <span>{currency.format(order.approvedCost)}</span>
+            <span className="row-label">Client due</span>
+            <span>{formatMoney(order.clientAmountDue ?? order.approvedCost ?? 0, order.clientCurrency || 'USD')}</span>
           </div>
           <div className="order-badge-col">
-            <span className="row-label">Sourcing</span>
-            <span>{currency.format(order.sourcingReport)}</span>
-          </div>
-          <div className="order-badge-col">
-            <span className="row-label">Transfer</span>
-            <span>{currency.format(order.verifiedTransfer)}</span>
-          </div>
-          <div className="order-badge-col">
-            <span className="row-label">Receipt</span>
-            <span>{order.supplierReceipt > 0 ? currency.format(order.supplierReceipt) : 'Pending confirmation'}</span>
+            <span className="row-label">Quote</span>
+            <span>{order.supplierQuote ? `${order.supplierQuote.currency} ${formatMoney(order.supplierQuote.total, order.supplierQuote.currency)}` : 'Pending'}</span>
           </div>
           <div className="order-badge-col status-col">
             <span className="row-label">Status</span>
@@ -474,16 +650,20 @@ function AuthenticatedDashboard({
           <button type="button" className={`nav-button ${activeView === 'workspace' ? 'active' : ''}`} onClick={() => navigate(`/workspace/${session.role}`)}>
             Workspace
           </button>
-          <button type="button" className={`nav-button ${activeView === 'approvals' ? 'active' : ''}`} onClick={() => navigate(`/workspace/${session.role}/approvals`)}>
-            Approvals
-          </button>
-          <button type="button" className={`nav-button ${activeView === 'reports' ? 'active' : ''}`} onClick={() => navigate(`/workspace/${session.role}/reports`)}>
-            Reports
-          </button>
+          {session.role !== 'client' && (
+            <button type="button" className={`nav-button ${activeView === 'approvals' ? 'active' : ''}`} onClick={() => navigate(`/workspace/${session.role}/approvals`)}>
+              Approvals
+            </button>
+          )}
+          {session.role !== 'client' && (
+            <button type="button" className={`nav-button ${activeView === 'reports' ? 'active' : ''}`} onClick={() => navigate(`/workspace/${session.role}/reports`)}>
+              Reports
+            </button>
+          )}
         </nav>
 
         <div className="side-panel">
-          <h4>Operations</h4>
+          <h4>{session.role === 'client' ? 'Client access' : 'Operations'}</h4>
           <p>{privateNarrative.walkthroughScope}</p>
         </div>
 
@@ -508,7 +688,142 @@ function AuthenticatedDashboard({
           </div>
         ) : null}
 
-        {activeView === 'workspace' && (
+        {session.role === 'sourcing' && activeView === 'workspace' && (
+          <section className="content-panel approvals-panel">
+            <div className="card-header">
+              <h3>Create purchase order</h3>
+              <span className="badge">Sourcing form</span>
+            </div>
+            <form className="login-form" onSubmit={handleCreatePurchaseOrder}>
+              <div className="field-grid">
+                <label>
+                  Client
+                  <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
+                    {clientCatalog.map((client) => (
+                      <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Supplier
+                  <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
+                    {supplierCatalog.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="field-grid">
+                <label>
+                  Product
+                  <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} />
+                </label>
+                <label>
+                  Quantity
+                  <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
+                </label>
+              </div>
+              <div className="field-grid">
+                <label>
+                  Client amount due
+                  <input type="number" min="0" step="0.01" value={purchaseDraft.amountDue} onChange={(event) => setPurchaseDraft((current) => ({ ...current, amountDue: Number(event.target.value) }))} />
+                </label>
+                <label>
+                  Currency
+                  <select value={purchaseDraft.currency} onChange={(event) => setPurchaseDraft((current) => ({ ...current, currency: event.target.value }))}>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </label>
+              </div>
+              <button type="submit" className="primary-button full-width">Save purchase order</button>
+            </form>
+          </section>
+        )}
+
+        {session.role === 'supplier' && activeView === 'workspace' && (
+          <section className="content-panel approvals-panel">
+            <div className="card-header">
+              <h3>Supplier quote submissions</h3>
+              <span className="badge">Assigned orders</span>
+            </div>
+            <div className="approval-list">
+              {visibleOrders.map((order) => (
+                <div key={order.id} className="approval-card">
+                  <div className="approval-header">
+                    <strong>{order.id}</strong>
+                    <span className="status-pill needs-review">{order.supplierQuoteStatus || 'awaiting_quote'}</span>
+                  </div>
+                  <p>{order.title}</p>
+                  <p>Qty: {order.qty}</p>
+                  <p>Client due: {order.clientCurrency || 'USD'} {formatMoney(order.clientAmountDue ?? order.approvedCost ?? 0, order.clientCurrency || 'USD')}</p>
+                  {order.supplierQuote ? (
+                    <div className="approval-metrics">
+                      <div>
+                        <span>Unit cost</span>
+                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.unitCost, order.supplierQuote.currency)}</strong>
+                      </div>
+                      <div>
+                        <span>Quote total</span>
+                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.total, order.supplierQuote.currency)}</strong>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={(event) => handleSubmitSupplierQuote(event, order)} className="supplier-form">
+                      <div className="field-grid">
+                        <label>
+                          Unit cost
+                          <input type="number" min="0" step="0.01" value={quoteDrafts[order.id]?.unitCost || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), unitCost: event.target.value } }))} />
+                        </label>
+                        <label>
+                          Currency
+                          <select value={quoteDrafts[order.id]?.currency || 'USD'} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), currency: event.target.value } }))}>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                          </select>
+                        </label>
+                      </div>
+                      <button type="submit" className="primary-button full-width">Submit supplier quote</button>
+                    </form>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {session.role === 'client' && activeView === 'workspace' && (
+          <section className="content-panel approvals-panel">
+            <div className="card-header">
+              <h3>My orders</h3>
+              <span className="badge">Private client view</span>
+            </div>
+            <div className="approval-list">
+              {clientVisibleOrders.map((order) => (
+                <div key={order.id} className="approval-card">
+                  <div className="approval-header">
+                    <strong>{order.id}</strong>
+                    <span className="status-pill matched">{order.title}</span>
+                  </div>
+                  <div className="approval-metrics">
+                    <div>
+                      <span>Quantity</span>
+                      <strong>{order.qty} units</strong>
+                    </div>
+                    <div>
+                      <span>Amount due</span>
+                      <strong>{order.clientCurrency || 'USD'} {formatMoney(order.clientAmountDue || 0, order.clientCurrency || 'USD')}</strong>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeView === 'workspace' && session.role === 'operations' && (
           <>
             <section className="stats-grid">
               <article className="stat-card">
@@ -521,7 +836,7 @@ function AuthenticatedDashboard({
               </article>
               <article className="stat-card">
                 <span>Approved value</span>
-                <strong>{currency.format(totalApprovedValue)}</strong>
+                <strong>{formatMoney(totalApprovedValue)}</strong>
               </article>
             </section>
 
@@ -567,55 +882,49 @@ function AuthenticatedDashboard({
           </>
         )}
 
-        {activeView === 'approvals' && (
+        {activeView === 'approvals' && session.role === 'operations' && (
           <section className="content-panel approvals-panel">
             <div className="card-header">
               <h3>Supplier approvals</h3>
-              <span className="badge">{approvalEligible.length} awaiting review</span>
+              <span className="badge">{approvalOrders.length} awaiting review</span>
             </div>
-            {approvalEligible.length === 0 ? (
+            {approvalOrders.length === 0 ? (
               <div className="empty-state">No supplier-confirmed quotes are awaiting approval.</div>
             ) : (
               <div className="approval-list">
-                {approvalEligible.map((quote) => (
-                  <div key={quote.id} className="approval-card">
+                {approvalOrders.map((order) => (
+                  <div key={order.id} className="approval-card">
                     <div>
                       <div className="approval-header">
-                        <strong>{quote.id}</strong>
-                        <span className="status-pill needs-review">{quote.status}</span>
+                        <strong>{order.id}</strong>
+                        <span className="status-pill needs-review">{order.supplierQuoteStatus}</span>
                       </div>
-                      <p>{quote.clientName}</p>
-                      <p>{quote.supplierName}</p>
+                      <p>{clientMap[order.clientId]?.name}</p>
+                      <p>{supplierMap[order.supplierId]?.name}</p>
                     </div>
                     <div className="approval-metrics">
                       <div>
-                        <span>Order</span>
-                        <strong>{quote.orderId}</strong>
+                        <span>Order qty</span>
+                        <strong>{order.qty} units</strong>
                       </div>
                       <div>
-                        <span>Approved cost</span>
-                        <strong>{currency.format(quote.amount)}</strong>
+                        <span>Quote total</span>
+                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.total, order.supplierQuote.currency)}</strong>
                       </div>
                       <div>
-                        <span>Quote date</span>
-                        <strong>{quote.quoteDate}</strong>
+                        <span>Submitted</span>
+                        <strong>{new Date(order.supplierQuote.submittedAt).toLocaleDateString()}</strong>
                       </div>
                     </div>
-                    <p className="quote-note">{quote.note}</p>
-                    {session.role === 'operations' ? (
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={() => handleApproveQuote(quote)}
-                        disabled={isProcessing}
-                      >
-                        {isProcessing ? 'Saving...' : 'Approve supplier terms'}
+                    <p className="quote-note">{order.supplierQuote.note}</p>
+                    <div className="approval-actions">
+                      <button type="button" className="primary-button" onClick={() => handleQuoteDecision(order, 'approve')}>
+                        Approve quote
                       </button>
-                    ) : (
-                      <button type="button" className="secondary-button" disabled>
-                        Sourcing cannot approve supplier terms
+                      <button type="button" className="secondary-button" onClick={() => handleQuoteDecision(order, 'return')}>
+                        Return for correction
                       </button>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -623,7 +932,7 @@ function AuthenticatedDashboard({
           </section>
         )}
 
-        {activeView === 'reports' && (
+        {activeView === 'reports' && session.role === 'operations' && (
           <section className="content-panel reports-panel">
             <div className="card-header">
               <h3>Reconciliation report</h3>
@@ -641,10 +950,10 @@ function AuthenticatedDashboard({
               {orders.map((order) => (
                 <div className="report-row" key={order.id}>
                   <strong>{order.id}</strong>
-                  <span>{currency.format(order.approvedCost)}</span>
-                  <span>{currency.format(order.sourcingReport)}</span>
-                  <span>{currency.format(order.verifiedTransfer)}</span>
-                  <span>{order.supplierReceipt > 0 ? currency.format(order.supplierReceipt) : 'Pending confirmation'}</span>
+                  <span>{formatMoney(order.approvedCost, order.clientCurrency || 'USD')}</span>
+                  <span>{formatMoney(order.sourcingReport, order.clientCurrency || 'USD')}</span>
+                  <span>{formatMoney(order.verifiedTransfer, order.clientCurrency || 'USD')}</span>
+                  <span>{order.supplierReceipt > 0 ? formatMoney(order.supplierReceipt, order.clientCurrency || 'USD') : 'Pending confirmation'}</span>
                   {renderStatusPill(order.status)}
                 </div>
               ))}
@@ -670,12 +979,12 @@ function AuthenticatedDashboard({
                 <p><strong>Supplier:</strong> {supplierMap[selectedOrder.supplierId]?.name}</p>
                 <p><strong>Title:</strong> {selectedOrder.title}</p>
                 <p><strong>Quantity:</strong> {selectedOrder.qty} units</p>
-                <p><strong>Approved cost:</strong> {currency.format(selectedOrder.approvedCost)}</p>
+                <p><strong>Amount due:</strong> {selectedOrder.clientCurrency || 'USD'} {formatMoney(selectedOrder.clientAmountDue ?? selectedOrder.approvedCost ?? 0, selectedOrder.clientCurrency || 'USD')}</p>
               </div>
               <div>
-                <p><strong>Sourcing report:</strong> {currency.format(selectedOrder.sourcingReport)}</p>
-                <p><strong>Verified transfer:</strong> {currency.format(selectedOrder.verifiedTransfer)}</p>
-                <p><strong>Supplier receipt:</strong> {selectedOrder.supplierReceipt > 0 ? currency.format(selectedOrder.supplierReceipt) : 'Pending confirmation'}</p>
+                <p><strong>Supplier quote:</strong> {selectedOrder.supplierQuote ? `${selectedOrder.supplierQuote.currency} ${formatMoney(selectedOrder.supplierQuote.total, selectedOrder.supplierQuote.currency)}` : 'Pending'}</p>
+                <p><strong>Verified transfer:</strong> {formatMoney(selectedOrder.verifiedTransfer, selectedOrder.clientCurrency || 'USD')}</p>
+                <p><strong>Supplier receipt:</strong> {selectedOrder.supplierReceipt > 0 ? formatMoney(selectedOrder.supplierReceipt, selectedOrder.clientCurrency || 'USD') : 'Pending confirmation'}</p>
                 <p><strong>Status:</strong> {renderStatusPill(selectedOrder.status)}</p>
               </div>
             </div>
@@ -684,15 +993,15 @@ function AuthenticatedDashboard({
               <div className="variance-box detail-box">
                 <div className="variance-item">
                   <span>Paid above approved cost</span>
-                  <strong>{currency.format(selectedOrder.approvedCost > 0 ? selectedOrder.sourcingReport - selectedOrder.approvedCost : 0)}</strong>
+                  <strong>{formatMoney(selectedOrder.approvedCost > 0 ? selectedOrder.sourcingReport - selectedOrder.approvedCost : 0, selectedOrder.clientCurrency || 'USD')}</strong>
                 </div>
                 <div className="variance-item">
                   <span>Gap between verified transfer and supplier receipt</span>
-                  <strong>{currency.format(Math.abs(selectedOrder.verifiedTransfer - selectedOrder.supplierReceipt))}</strong>
+                  <strong>{formatMoney(Math.abs(selectedOrder.verifiedTransfer - selectedOrder.supplierReceipt), selectedOrder.clientCurrency || 'USD')}</strong>
                 </div>
                 <div className="variance-item">
                   <span>Sourcing report vs transfer</span>
-                  <strong>{currency.format(Math.abs(selectedOrder.sourcingReport - selectedOrder.verifiedTransfer))}</strong>
+                  <strong>{formatMoney(Math.abs(selectedOrder.sourcingReport - selectedOrder.verifiedTransfer), selectedOrder.clientCurrency || 'USD')}</strong>
                 </div>
               </div>
             )}
@@ -703,7 +1012,7 @@ function AuthenticatedDashboard({
               {selectedOrder.varianceChecks ? (
                 <ul className="history-list">
                   {selectedOrder.varianceChecks.map((check) => (
-                    <li key={check.label}>{check.label}: {currency.format(check.amount)}</li>
+                    <li key={check.label}>{check.label}: {formatMoney(check.amount, selectedOrder.clientCurrency || 'USD')}</li>
                   ))}
                 </ul>
               ) : (
