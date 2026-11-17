@@ -372,7 +372,7 @@ function AuthenticatedDashboard({
       );
       setStatusMessage({ type: 'success', text: `Approval saved for ${quote.orderId}. The order was refreshed.` });
       navigate(`/workspace/${session.role}`);
-    } catch (error) {
+    } catch {
       setStatusMessage({ type: 'error', text: 'Approval failed. Please retry or contact the admin.' });
     } finally {
       setIsProcessing(false);
