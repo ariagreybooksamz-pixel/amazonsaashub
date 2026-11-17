@@ -362,6 +362,16 @@ function AuthenticatedDashboard({
     title: 'Seasonal replenishment',
     qty: 100,
     amountDue: 850,
+    productPrice: 8.5,
+    orderAmount: 850,
+    clientName: '',
+    clientPhone: '',
+    clientEmail: '',
+    supplierName: '',
+    supplierProductList: 'Premium packaging line',
+    supplierCategory: 'Packaging',
+    supplierPrice: 8.5,
+    sampleImage: '',
     currency: 'USD',
   });
   const [quoteDrafts, setQuoteDrafts] = useState({});
@@ -433,7 +443,13 @@ function AuthenticatedDashboard({
     }
 
     const qty = Number(purchaseDraft.qty);
-    const amountDue = Number(purchaseDraft.amountDue);
+    const amountDue = Number(purchaseDraft.amountDue || purchaseDraft.orderAmount || 0);
+    const productPrice = Number(purchaseDraft.productPrice || 0);
+    const supplierPrice = Number(purchaseDraft.supplierPrice || 0);
+    const clientPhone = purchaseDraft.clientPhone.trim();
+    const clientEmail = purchaseDraft.clientEmail.trim();
+    const supplierNameValue = (trimmedSupplierName || purchaseDraft.supplierName || supplierMap[supplierId]?.name || '').trim();
+    const clientNameValue = (trimmedClientName || purchaseDraft.clientName || clientMap[clientId]?.name || '').trim();
 
     if (!clientId || !supplierId || !purchaseDraft.title || !qty || !amountDue) {
       setStatusMessage({ type: 'error', text: 'Provide a client, supplier, product, quantity, and client amount due.' });
@@ -459,9 +475,19 @@ function AuthenticatedDashboard({
       supplierQuoteStatus: 'awaiting_quote',
       workflowNote: 'Sourcing saved the purchase request and client-facing amount due. Awaiting supplier quote.',
       actionLabel: 'Awaiting quote',
+      clientName: clientNameValue,
+      clientPhone,
+      clientEmail,
+      productPrice,
+      orderAmount: amountDue,
+      supplierName: supplierNameValue,
+      supplierProductList: purchaseDraft.supplierProductList,
+      supplierCategory: purchaseDraft.supplierCategory,
+      supplierPrice,
+      sampleImage: purchaseDraft.sampleImage,
     };
 
-    const savedClientName = clientMap[clientId]?.name || trimmedClientName || 'the selected client';
+    const savedClientName = clientMap[clientId]?.name || clientNameValue || 'the selected client';
 
     setOrders((current) => [nextOrder, ...current]);
     setStatusMessage({ type: 'success', text: `Purchase order ${orderId} was saved for ${savedClientName}.` });
@@ -473,6 +499,16 @@ function AuthenticatedDashboard({
       title: 'Seasonal replenishment',
       qty: 100,
       amountDue: 850,
+      productPrice: 8.5,
+      orderAmount: 850,
+      clientName: '',
+      clientPhone: '',
+      clientEmail: '',
+      supplierName: '',
+      supplierProductList: 'Premium packaging line',
+      supplierCategory: 'Packaging',
+      supplierPrice: 8.5,
+      sampleImage: '',
       currency: 'USD',
     });
   };
@@ -483,6 +519,9 @@ function AuthenticatedDashboard({
     const draft = quoteDrafts[order.id] || {};
     const unitCost = Number(draft.unitCost || 0);
     const quoteCurrency = draft.currency || 'USD';
+    const quantityReceived = Number(draft.quantityReceived || 0);
+    const amountReceived = Number(draft.amountReceived || 0);
+    const paymentStatus = draft.paymentStatus || 'paid';
 
     if (!unitCost || unitCost <= 0) {
       setStatusMessage({ type: 'error', text: 'Enter a valid supplier unit cost before submitting the quote.' });
@@ -504,18 +543,23 @@ function AuthenticatedDashboard({
                 total: quoteTotal,
                 submittedBy: session.name,
                 submittedAt,
+                quantityReceived,
+                amountReceived,
+                paymentStatus,
+                reference: draft.reference || 'Supplier confirmation',
                 note: draft.note || 'Supplier quote submitted for approval.',
               },
               supplierQuoteStatus: 'pending',
               supplierQuoteNeedsApproval: true,
               status: 'Awaiting supplier approval',
-              workflowNote: `Supplier quote submitted on ${submittedAt.slice(0, 10)}. Client amount due remains unchanged.`,
+              supplierReceipt: quantityReceived || item.supplierReceipt || 0,
+              workflowNote: `Supplier quote submitted on ${submittedAt.slice(0, 10)}. Quantity and payment details were confirmed for this order.`,
             }
           : item,
       ),
     );
 
-    setStatusMessage({ type: 'success', text: `Supplier quote for ${order.id} submitted. Operations can now approve or return it.` });
+    setStatusMessage({ type: 'success', text: `Supplier quote and payment confirmation for ${order.id} submitted. Operations can now approve or return it.` });
   };
 
   const handleQuoteDecision = (order, decision) => {
@@ -758,18 +802,41 @@ function AuthenticatedDashboard({
                 </div>
                 <div className="field-grid">
                   <label>
-                    Product name
-                    <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} />
+                    Client name
+                    <input value={purchaseDraft.clientName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientName: event.target.value }))} placeholder="Client full name" />
                   </label>
                   <label>
-                    Quantity
-                    <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
+                    Client phone
+                    <input value={purchaseDraft.clientPhone} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientPhone: event.target.value }))} placeholder="(555) 123-4567" />
                   </label>
                 </div>
                 <div className="field-grid">
                   <label>
-                    Client amount due
-                    <input type="number" min="0" step="0.01" value={purchaseDraft.amountDue} onChange={(event) => setPurchaseDraft((current) => ({ ...current, amountDue: Number(event.target.value) }))} />
+                    Client email
+                    <input type="email" value={purchaseDraft.clientEmail} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientEmail: event.target.value }))} placeholder="client@company.com" />
+                  </label>
+                  <label>
+                    Product name
+                    <input value={purchaseDraft.title} onChange={(event) => setPurchaseDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Choose product" />
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Product price
+                    <input type="number" min="0" step="0.01" value={purchaseDraft.productPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, productPrice: Number(event.target.value) }))} />
+                  </label>
+                  <label>
+                    Order amount
+                    <input type="number" min="0" step="0.01" value={purchaseDraft.orderAmount || purchaseDraft.amountDue} onChange={(event) => {
+                      const nextAmount = Number(event.target.value);
+                      setPurchaseDraft((current) => ({ ...current, orderAmount: nextAmount, amountDue: nextAmount }));
+                    }} />
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Quantity
+                    <input type="number" min="1" value={purchaseDraft.qty} onChange={(event) => setPurchaseDraft((current) => ({ ...current, qty: Number(event.target.value) }))} />
                   </label>
                   <label>
                     Currency
@@ -778,6 +845,36 @@ function AuthenticatedDashboard({
                       <option value="EUR">EUR</option>
                       <option value="GBP">GBP</option>
                     </select>
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Supplier name
+                    <input value={purchaseDraft.supplierName} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierName: event.target.value }))} placeholder="Supplier company" />
+                  </label>
+                  <label>
+                    Product list
+                    <input value={purchaseDraft.supplierProductList} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierProductList: event.target.value }))} placeholder="List of supplier products" />
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Category
+                    <input value={purchaseDraft.supplierCategory} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierCategory: event.target.value }))} placeholder="Category" />
+                  </label>
+                  <label>
+                    Supplier price
+                    <input type="number" min="0" step="0.01" value={purchaseDraft.supplierPrice} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierPrice: Number(event.target.value) }))} />
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Sample image URL
+                    <input value={purchaseDraft.sampleImage} onChange={(event) => setPurchaseDraft((current) => ({ ...current, sampleImage: event.target.value }))} placeholder="https://.../image.jpg" />
+                  </label>
+                  <label>
+                    &nbsp;
+                    <span className="muted-text">Sourcing intake ready for review</span>
                   </label>
                 </div>
                 <button type="submit" className="primary-button full-width">Save purchase order</button>
@@ -873,7 +970,31 @@ function AuthenticatedDashboard({
                           </select>
                         </label>
                       </div>
-                      <button type="submit" className="primary-button full-width">Submit quote</button>
+                      <div className="field-grid">
+                        <label>
+                          Quantity received
+                          <input type="number" min="0" value={quoteDrafts[order.id]?.quantityReceived || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), quantityReceived: event.target.value } }))} />
+                        </label>
+                        <label>
+                          Payment received
+                          <input type="number" min="0" step="0.01" value={quoteDrafts[order.id]?.amountReceived || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), amountReceived: event.target.value } }))} />
+                        </label>
+                      </div>
+                      <div className="field-grid">
+                        <label>
+                          Payment status
+                          <select value={quoteDrafts[order.id]?.paymentStatus || 'paid'} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), paymentStatus: event.target.value } }))}>
+                            <option value="paid">Paid</option>
+                            <option value="partial">Partial</option>
+                            <option value="pending">Pending</option>
+                          </select>
+                        </label>
+                        <label>
+                          Reference / invoice
+                          <input value={quoteDrafts[order.id]?.reference || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), reference: event.target.value } }))} placeholder="Invoice or payment reference" />
+                        </label>
+                      </div>
+                      <button type="submit" className="primary-button full-width">Submit quote and payment details</button>
                     </form>
                   )}
                 </div>
@@ -957,6 +1078,23 @@ function AuthenticatedDashboard({
                         <strong>{new Date(order.supplierQuote.submittedAt).toLocaleDateString()}</strong>
                       </div>
                     </div>
+                    <div className="approval-metrics">
+                      <div>
+                        <span>Qty received</span>
+                        <strong>{order.supplierQuote.quantityReceived ?? order.supplierReceipt ?? 0} units</strong>
+                      </div>
+                      <div>
+                        <span>Payment received</span>
+                        <strong>{order.supplierQuote.currency} {formatMoney(order.supplierQuote.amountReceived ?? 0, order.supplierQuote.currency)}</strong>
+                      </div>
+                      <div>
+                        <span>Payment status</span>
+                        <strong>{order.supplierQuote.paymentStatus || 'paid'}</strong>
+                      </div>
+                    </div>
+                    <p className="quote-note">
+                      <strong>Reference:</strong> {order.supplierQuote.reference || 'Supplier confirmation'}
+                    </p>
                     <p className="quote-note">{order.supplierQuote.note}</p>
                     <div className="approval-actions">
                       <button type="button" className="primary-button" onClick={() => handleQuoteDecision(order, 'approve')}>
