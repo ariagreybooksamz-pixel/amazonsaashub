@@ -588,7 +588,8 @@ function AuthenticatedDashboard({
     return (
       <div className="order-row" key={order.id}>
         <div className="order-row-main">
-          <div className="order-badge-col">
+          <div className="order-badge-col order-id-col">
+            <span className="row-label">Order</span>
             <strong>{order.id}</strong>
             <span>{client?.name}</span>
           </div>
@@ -596,17 +597,9 @@ function AuthenticatedDashboard({
             <span className="row-label">Supplier</span>
             <span>{supplier?.name}</span>
           </div>
-          <div className="order-badge-col">
+          <div className="order-badge-col compact-col">
             <span className="row-label">Qty</span>
             <span>{order.qty}</span>
-          </div>
-          <div className="order-badge-col">
-            <span className="row-label">Client due</span>
-            <span>{formatMoney(order.clientAmountDue ?? order.approvedCost ?? 0, order.clientCurrency || 'USD')}</span>
-          </div>
-          <div className="order-badge-col">
-            <span className="row-label">Quote</span>
-            <span>{order.supplierQuote ? `${order.supplierQuote.currency} ${formatMoney(order.supplierQuote.total, order.supplierQuote.currency)}` : 'Pending'}</span>
           </div>
           <div className="order-badge-col status-col">
             <span className="row-label">Status</span>
@@ -617,11 +610,11 @@ function AuthenticatedDashboard({
         <div className="order-row-actions">
           {isOperations && isDiscrepancy ? (
             <button type="button" className="secondary-button" onClick={() => setSelectedOrder(order)}>
-              Review discrepancy
+              Review
             </button>
           ) : (
             <button type="button" className="secondary-button" onClick={() => setSelectedOrder(order)}>
-              View order
+              Open
             </button>
           )}
         </div>
@@ -755,9 +748,16 @@ function AuthenticatedDashboard({
                     <strong>{order.id}</strong>
                     <span className="status-pill needs-review">{order.supplierQuoteStatus || 'awaiting_quote'}</span>
                   </div>
-                  <p>{order.title}</p>
-                  <p>Qty: {order.qty}</p>
-                  <p>Client due: {order.clientCurrency || 'USD'} {formatMoney(order.clientAmountDue ?? order.approvedCost ?? 0, order.clientCurrency || 'USD')}</p>
+                  <div className="approval-metrics">
+                    <div>
+                      <span>Product</span>
+                      <strong>{order.title}</strong>
+                    </div>
+                    <div>
+                      <span>Qty</span>
+                      <strong>{order.qty}</strong>
+                    </div>
+                  </div>
                   {order.supplierQuote ? (
                     <div className="approval-metrics">
                       <div>
@@ -773,7 +773,7 @@ function AuthenticatedDashboard({
                     <form onSubmit={(event) => handleSubmitSupplierQuote(event, order)} className="supplier-form">
                       <div className="field-grid">
                         <label>
-                          Unit cost
+                          Your price
                           <input type="number" min="0" step="0.01" value={quoteDrafts[order.id]?.unitCost || ''} onChange={(event) => setQuoteDrafts((current) => ({ ...current, [order.id]: { ...(current[order.id] || {}), unitCost: event.target.value } }))} />
                         </label>
                         <label>
@@ -785,7 +785,7 @@ function AuthenticatedDashboard({
                           </select>
                         </label>
                       </div>
-                      <button type="submit" className="primary-button full-width">Submit supplier quote</button>
+                      <button type="submit" className="primary-button full-width">Submit quote</button>
                     </form>
                   )}
                 </div>
@@ -805,7 +805,7 @@ function AuthenticatedDashboard({
                 <div key={order.id} className="approval-card">
                   <div className="approval-header">
                     <strong>{order.id}</strong>
-                    <span className="status-pill matched">{order.title}</span>
+                    <span className="status-pill matched">Order</span>
                   </div>
                   <div className="approval-metrics">
                     <div>
@@ -824,62 +824,15 @@ function AuthenticatedDashboard({
         )}
 
         {activeView === 'workspace' && session.role === 'operations' && (
-          <>
-            <section className="stats-grid">
-              <article className="stat-card">
-                <span>Total orders</span>
-                <strong>{visibleOrders.length}</strong>
-              </article>
-              <article className="stat-card">
-                <span>Open cases</span>
-                <strong>{openCases}</strong>
-              </article>
-              <article className="stat-card">
-                <span>Approved value</span>
-                <strong>{formatMoney(totalApprovedValue)}</strong>
-              </article>
-            </section>
-
-            <section className="cards-row">
-              <div className="info-card wide-panel">
-                <div className="card-header">
-                  <h3>Order Pipeline</h3>
-                  <span className="badge">Review queue</span>
-                </div>
-                <div className="orders-table">
-                  {visibleOrders.map((order) => renderOrderRow(order))}
-                </div>
-              </div>
-
-              <div className="info-card narrow-panel">
-                <div className="card-header">
-                  <h3>Client Records</h3>
-                  <span className="badge">Fictional</span>
-                </div>
-                <ul className="client-list">
-                  {clientCatalog.map((client) => (
-                    <li key={client.id}>
-                      <strong>{client.name}</strong>
-                      <span>{client.segment}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="card-header secondary-space">
-                  <h3>Suppliers</h3>
-                  <span className="badge">Private</span>
-                </div>
-                <ul className="client-list">
-                  {supplierCatalog.map((supplier) => (
-                    <li key={supplier.id}>
-                      <strong>{supplier.name}</strong>
-                      <span>{supplier.status}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </section>
-          </>
+          <section className="content-panel approvals-panel">
+            <div className="card-header">
+              <h3>Operations queue</h3>
+              <span className="badge">{visibleOrders.length} active</span>
+            </div>
+            <div className="orders-table">
+              {visibleOrders.map((order) => renderOrderRow(order))}
+            </div>
+          </section>
         )}
 
         {activeView === 'approvals' && session.role === 'operations' && (

@@ -600,8 +600,8 @@ button {
 .order-row {
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  padding: 14px 12px 12px;
+  gap: 12px;
+  padding: 12px 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: #fbfcff;
@@ -610,25 +610,33 @@ button {
 .order-row-main {
   flex: 1;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-start;
   flex-wrap: wrap;
 }
 
 .order-badge-col {
-  min-width: 90px;
+  min-width: 110px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   color: var(--text);
 }
 
+.order-id-col {
+  min-width: 150px;
+}
+
+.compact-col {
+  min-width: 70px;
+}
+
 .order-badge-col strong {
-  font-size: 0.94rem;
+  font-size: 0.92rem;
 }
 
 .row-label {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
@@ -636,6 +644,11 @@ button {
 
 .status-col {
   min-width: 110px;
+}
+
+.order-row .secondary-button {
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
 }
 
 .status-pill {
