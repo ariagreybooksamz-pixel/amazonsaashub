@@ -77,7 +77,7 @@ const getStoredApprovals = () => {
 
 const getVisibleOrders = (role, supplierId, clientId, orders) => {
   if (role === 'operations') return orders;
-  if (role === 'sourcing') return orders.filter((order) => order.status !== 'Matched');
+  if (role === 'sourcing') return orders.filter((order) => order.status !== 'Matched' && order.status !== 'Report mismatch');
   if (role === 'supplier') return orders.filter((order) => order.supplierId === supplierId);
   if (role === 'client') return orders.filter((order) => order.clientId === clientId);
   return [];
@@ -352,6 +352,10 @@ function AuthenticatedDashboard({
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusMessage, setStatusMessage] = useState({ type: 'info', text: '' });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [clientOptions, setClientOptions] = useState(clientCatalog);
+  const [supplierOptions, setSupplierOptions] = useState(supplierCatalog);
+  const [newClientName, setNewClientName] = useState('');
+  const [newSupplierName, setNewSupplierName] = useState('');
   const [purchaseDraft, setPurchaseDraft] = useState({
     clientId: clientCatalog[0]?.id ?? '',
     supplierId: supplierCatalog[0]?.id ?? '',
@@ -383,8 +387,8 @@ function AuthenticatedDashboard({
     () => getClientVisibleOrders(session.clientId, orders),
     [session.clientId, orders],
   );
-  const clientMap = Object.fromEntries(clientCatalog.map((client) => [client.id, client]));
-  const supplierMap = Object.fromEntries(supplierCatalog.map((supplier) => [supplier.id, supplier]));
+  const clientMap = Object.fromEntries(clientOptions.map((client) => [client.id, client]));
+  const supplierMap = Object.fromEntries(supplierOptions.map((supplier) => [supplier.id, supplier]));
 
   const approvalEligible = approvalQueue.filter((quote) => quote.eligible && quote.supplierId);
   const approvalOrders = useMemo(
@@ -397,10 +401,41 @@ function AuthenticatedDashboard({
   const handleCreatePurchaseOrder = (event) => {
     event.preventDefault();
 
+    const trimmedClientName = newClientName.trim();
+    const trimmedSupplierName = newSupplierName.trim();
+    let clientId = purchaseDraft.clientId;
+    let supplierId = purchaseDraft.supplierId;
+
+    if (trimmedClientName) {
+      const normalizedClientName = trimmedClientName.toLowerCase();
+      const existingClient = clientOptions.find((client) => client.name.toLowerCase() === normalizedClientName);
+      if (existingClient) {
+        clientId = existingClient.id;
+      } else {
+        const createdClientId = `client-${Date.now().toString().slice(-6)}`;
+        const newClient = { id: createdClientId, name: trimmedClientName, segment: 'New account' };
+        setClientOptions((current) => [newClient, ...current]);
+        clientId = createdClientId;
+      }
+    }
+
+    if (trimmedSupplierName) {
+      const normalizedSupplierName = trimmedSupplierName.toLowerCase();
+      const existingSupplier = supplierOptions.find((supplier) => supplier.name.toLowerCase() === normalizedSupplierName);
+      if (existingSupplier) {
+        supplierId = existingSupplier.id;
+      } else {
+        const createdSupplierId = `supplier-${Date.now().toString().slice(-6)}`;
+        const newSupplier = { id: createdSupplierId, name: trimmedSupplierName, region: 'New supplier', status: 'Pending review', contact: 'New contact' };
+        setSupplierOptions((current) => [newSupplier, ...current]);
+        supplierId = createdSupplierId;
+      }
+    }
+
     const qty = Number(purchaseDraft.qty);
     const amountDue = Number(purchaseDraft.amountDue);
 
-    if (!purchaseDraft.clientId || !purchaseDraft.supplierId || !purchaseDraft.title || !qty || !amountDue) {
+    if (!clientId || !supplierId || !purchaseDraft.title || !qty || !amountDue) {
       setStatusMessage({ type: 'error', text: 'Provide a client, supplier, product, quantity, and client amount due.' });
       return;
     }
@@ -408,8 +443,8 @@ function AuthenticatedDashboard({
     const orderId = `MPS-${Date.now().toString().slice(-5)}`;
     const nextOrder = {
       id: orderId,
-      clientId: purchaseDraft.clientId,
-      supplierId: purchaseDraft.supplierId,
+      clientId,
+      supplierId,
       title: purchaseDraft.title,
       status: 'Pending supplier quote',
       qty,
@@ -426,11 +461,15 @@ function AuthenticatedDashboard({
       actionLabel: 'Awaiting quote',
     };
 
+    const savedClientName = clientMap[clientId]?.name || trimmedClientName || 'the selected client';
+
     setOrders((current) => [nextOrder, ...current]);
-    setStatusMessage({ type: 'success', text: `Purchase order ${orderId} was saved for ${clientMap[purchaseDraft.clientId]?.name}.` });
+    setStatusMessage({ type: 'success', text: `Purchase order ${orderId} was saved for ${savedClientName}.` });
+    setNewClientName('');
+    setNewSupplierName('');
     setPurchaseDraft({
-      clientId: clientCatalog[0]?.id ?? '',
-      supplierId: supplierCatalog[0]?.id ?? '',
+      clientId: clientOptions[0]?.id ?? '',
+      supplierId: supplierOptions[0]?.id ?? '',
       title: 'Seasonal replenishment',
       qty: 100,
       amountDue: 850,
@@ -693,7 +732,7 @@ function AuthenticatedDashboard({
                   <label>
                     Client name
                     <select value={purchaseDraft.clientId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, clientId: event.target.value }))}>
-                      {clientCatalog.map((client) => (
+                      {clientOptions.map((client) => (
                         <option key={client.id} value={client.id}>{client.name}</option>
                       ))}
                     </select>
@@ -701,10 +740,20 @@ function AuthenticatedDashboard({
                   <label>
                     Supplier name
                     <select value={purchaseDraft.supplierId} onChange={(event) => setPurchaseDraft((current) => ({ ...current, supplierId: event.target.value }))}>
-                      {supplierCatalog.map((supplier) => (
+                      {supplierOptions.map((supplier) => (
                         <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                       ))}
                     </select>
+                  </label>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Add new client
+                    <input value={newClientName} onChange={(event) => setNewClientName(event.target.value)} placeholder="Create a new client" />
+                  </label>
+                  <label>
+                    Add new supplier
+                    <input value={newSupplierName} onChange={(event) => setNewSupplierName(event.target.value)} placeholder="Create a new supplier" />
                   </label>
                 </div>
                 <div className="field-grid">
